@@ -1,0 +1,43 @@
+name: Doctor Who IV experimental ASI x86 build
+on:
+  push:
+    branches:
+      - dwiv-chatgpt-rotor-walkin-build
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    name: Test then cross-compile Windows x86 ASI
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install MinGW cross compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y g++-mingw-w64-i686-posix file
+      - name: Run Linux fake-native tests
+        run: |
+          set -euxo pipefail
+          g++ -std=c++17 -O2 -Wall -Wextra -Werror tests/runtime_test.cpp -o /tmp/dwiv-runtime-test
+          /tmp/dwiv-runtime-test
+          g++ -std=c++17 -O2 -Wall -Wextra -Werror tests/sequence_test.cpp -o /tmp/dwiv-sequence-test
+          /tmp/dwiv-sequence-test
+      - name: Compile DoctorWhoIV.asi for 32-bit Windows
+        run: |
+          set -euxo pipefail
+          mkdir -p dist
+          i686-w64-mingw32-g++-posix -std=c++17 -O2 -Wall -Wextra -Werror -shared -static -static-libgcc -static-libstdc++ -Wl,--kill-at -Wl,--no-insert-timestamp source/plugin.cpp -o dist/DoctorWhoIV.asi -lwinmm -lversion
+          file dist/DoctorWhoIV.asi | tee dist/BUILD-STATUS.txt
+          grep -F 'PE32 executable (DLL)' dist/BUILD-STATUS.txt
+          sha256sum dist/DoctorWhoIV.asi | tee dist/SHA256.txt
+          echo 'EXPERIMENTAL ASI ONLY. Does NOT contain new rotor WDR models. Not GTA IV tested. Do NOT overwrite your working waypoint ASI until tested and backed up.' > dist/IMPORTANT-READ-FIRST.txt
+      - name: Publish compiled ASI as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DoctorWhoIV_Experimental_ASI_x86
+          path: dist/
+          if-no-files-found: error
+          retention-days: 14
